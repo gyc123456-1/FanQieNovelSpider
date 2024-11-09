@@ -1,3 +1,5 @@
+import json
+import re
 import typing
 import typing_extensions
 import requests
@@ -452,43 +454,63 @@ class FanQieChapter:
         :param cookie: 账号 Cookie, 不填则只能爬取完整的前十章和后续章节的开头
         """
         self.chap_id: int = int(chap_id)
-        self.api_url: str = "https://fanqienovel.com/api/reader/full?itemId=" + str(chap_id)
+        self.chapter_url: str = "https://fanqienovel.com/reader/" + str(chap_id)
         self.headers["Cookie"] = cookie
+        self.decoder = FanQieChapDecoder()
+
+    def get_api_data(self):
+        """
+        用于获取和原来 api 格式一样的数据
+        :return: api 数据
+        """
+        response = requests.get(url=self.chapter_url, headers=self.headers)
+        tree = etree.HTML(response.text)
+        js = tree.xpath("//html/body/script[1]/text()")[0]
+        api_data = re.search(r"window\.__INITIAL_STATE__\s*=\s*(\{.*?});", js, re.DOTALL).group(1)
+        api_data = {"data": json.loads(api_data)["reader"]}
+        return api_data
 
     def get_title(self: typing_extensions.Self) -> str:
         """
         获取章节标题
         :return: 章节标题
         """
-        response = requests.get(url=self.api_url, headers=self.headers)
-        json_obj = response.json()
+        json_obj = self.get_api_data()
         title = json_obj["data"]["chapterData"]["title"]
         return title
 
-    def get_time(self: typing_extensions.Self) -> int:
+    def get_first_time(self: typing_extensions.Self) -> int:
         """
-        获取章节首次发布时间戳
-        :return: 章节首次发布时间戳
+        获取章节首次发布时间
+        :return: 章节首次发布时间
         """
-        response = requests.get(url=self.api_url, headers=self.headers)
-        json_obj = response.json()
-        time = json_obj["data"]["chapterData"]["firstPassTime"]
-        return time
+        response = requests.get(url=self.chapter_url, headers=self.headers)
+        tree = etree.HTML(response.text)
+        time = json.loads(tree.xpath("//html/head/script[2]/text()")[0])["upDate"]
+        return time.replace("T", " ")
+
+    def get_modified_time(self: typing_extensions.Self) -> int:
+        """
+        获取章节最后修改时间
+        :return: 章节最后修改时间
+        """
+        response = requests.get(url=self.chapter_url, headers=self.headers)
+        tree = etree.HTML(response.text)
+        time = json.loads(tree.xpath("//html/head/script[1]/text()")[0])["dateModified"]
+        return time.replace("T", " ")
 
     def get_paras(self: typing_extensions.Self) -> Paragraphs:
         """
         获取段落列表
         :return: 段落列表
         """
-        response = requests.get(url=self.api_url, headers=self.headers)
-        json_obj = response.json()
+        json_obj = self.get_api_data()
         content = json_obj["data"]["chapterData"]["content"]
         tree = etree.HTML(content)
         content_tags = tree.xpath("//text()")
         content = []
-        decoder = FanQieChapDecoder()
         for content_tag in content_tags:
-            content.append(decoder.decode(content_tag))
+            content.append(self.decoder.decode(content_tag))
         return Paragraphs(content)
 
     def get_book(self: typing_extensions.Self) -> int:
@@ -496,8 +518,7 @@ class FanQieChapter:
         获取章节所属书籍的 ID
         :return: 书籍 ID
         """
-        response = requests.get(url=self.api_url, headers=self.headers)
-        json_obj = response.json()
+        json_obj = self.get_api_data()
         return int(json_obj["data"]["chapterData"]["bookId"])
 
     def get_word_number(self: typing_extensions.Self) -> int:
@@ -505,8 +526,7 @@ class FanQieChapter:
         获取章节字数
         :return: 章节字数
         """
-        response = requests.get(url=self.api_url, headers=self.headers)
-        json_obj = response.json()
+        json_obj = self.get_api_data()
         return int(json_obj["data"]["chapterData"]["chapterWordNumber"])
 
 
@@ -560,19 +580,11 @@ class FanQieBook:
         :return: 信息字典
         """
         info = {}
-        try:
-            api_url = "https://fanqienovel.com/api/reader/full?itemId=" + str(
-                self.get_chap_ids()[0]
-            )
-        except IndexError:
-            raise BookError("此书无效")
-        response = requests.get(url=api_url, headers=self.headers)
-        json_obj = response.json()
-        info["title"] = json_obj["data"]["chapterData"]["bookName"]
-        info["author"] = json_obj["data"]["chapterData"]["author"]
-        info["cover"] = json_obj["data"]["chapterData"]["thumbUri"]
         response = requests.get(url=self.book_url, headers=self.headers)
         tree = etree.HTML(response.text)
+        info["title"] = tree.xpath('//div[@class="info-name"]/h1/text()')[0]
+        info["author"] = tree.xpath('//span[@class="author-name-text"]/text()')[0]
+        info["cover"] = json.loads(tree.xpath("//html/head/script[1]/text()")[0])["image"][0]
         info["intro"] = tree.xpath('//div[@class="page-abstract-content"]/p/text()')[0]
         info["labels"] = tree.xpath('//div[@class="info-label"]/span/text()')
         info["word_count"] = " ".join(tree.xpath('//div[@class="info-count-word"]/span/text()'))
@@ -652,7 +664,7 @@ class FanQieBookSearcher:
         creation_status: int = 127,
     ) -> dict:
         """
-        通过关键字搜索书籍
+        通过关键字搜索书籍（无法使用）
         :param query_word: 关键字
         :param page: 结果第几页，从 0 开始
         :param query_type: 排序, 相关0 最新1 最热2

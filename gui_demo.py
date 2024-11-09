@@ -1,5 +1,6 @@
 import tkinter as tk
 import tkinter.ttk
+import ttkbootstrap
 import tkinter.messagebox
 import tkinter.scrolledtext
 import FanQieNovelSpider
@@ -15,12 +16,14 @@ headers = {
 }
 stop = threading.Event()
 
-window = tk.Tk()
+window = ttkbootstrap.Window()
 window.title("番茄免费小说客户端 by system-windows")
-window.geometry("680x540")
+window.geometry("640x540")
 window.resizable(False, True)
 
-pager = tk.ttk.Notebook(window, width=680)
+style = ttkbootstrap.Style("morph")
+
+pager = tk.ttk.Notebook(window, width=640)
 pager.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
 cookie_frame = tk.ttk.Frame(pager)
@@ -37,7 +40,9 @@ def save_cookie():
         f.write(cookie_var.get())
 
 
-tk.ttk.Button(cookie_frame, text="保存", command=save_cookie).pack(side=tk.TOP)
+tk.ttk.Button(cookie_frame, text="保存", command=save_cookie, bootstyle=ttkbootstrap.OUTLINE).pack(
+    side=tk.TOP
+)
 pager.add(cookie_frame, text="Cookie 设置")
 
 main_root_frame = tk.ttk.Frame(pager)
@@ -62,9 +67,13 @@ def view_book(book_id):
         cover = ImageTk.PhotoImage(image)
         temp_cover = cover
         tk.ttk.Label(info_frame, image=cover).grid(row=0, column=0, rowspan=10)
-        tk.ttk.Button(info_frame, text="开始阅读", command=read(book)).grid(row=0, column=4)
-        tk.ttk.Button(info_frame, text="下载", command=download(book)).grid(row=0, column=5)
-        scrolledtext = tk.scrolledtext.ScrolledText(info_frame, width=60)
+        tk.ttk.Button(
+            info_frame, text="开始阅读", command=read(book), bootstyle=ttkbootstrap.OUTLINE
+        ).grid(row=0, column=4)
+        tk.ttk.Button(
+            info_frame, text="下载", command=download(book), bootstyle=ttkbootstrap.OUTLINE
+        ).grid(row=0, column=5)
+        scrolledtext = tk.scrolledtext.ScrolledText(info_frame, width=54)
         scrolledtext.grid(row=1, column=1, rowspan=9, columnspan=8)
         info_text = f"书名: {book_info['title']}\n作者: {book_info['author']}\n标签: {','.join(book_info['labels'])}\n字数: {book_info['word_count']}\n上次更新时间: {book_info['last_update_time']}\n简介: {book_info['intro']}"
         scrolledtext.insert("0.0", info_text)
@@ -190,8 +199,12 @@ def read_chap(chap):
             return
         read_chap(chap_list[i])
 
-    tk.ttk.Button(text_frame, text="上一章", command=previous).pack(side=tk.LEFT)
-    tk.ttk.Button(text_frame, text="下一章", command=next).pack(side=tk.RIGHT)
+    tk.ttk.Button(text_frame, text="上一章", command=previous, bootstyle=ttkbootstrap.OUTLINE).pack(
+        side=tk.LEFT
+    )
+    tk.ttk.Button(text_frame, text="下一章", command=next, bootstyle=ttkbootstrap.OUTLINE).pack(
+        side=tk.RIGHT
+    )
 
     pager.select(6)
 
@@ -220,9 +233,9 @@ def load_books(row_count=6):
         image = Image.open(BytesIO(response.content)).resize((100, 150))
         cover = ImageTk.PhotoImage(image)
         book_covers.append(cover)
-        tk.ttk.Button(main_frame, image=cover, command=view_book(i["book_id"])).grid(
-            row=int(n / row_count), column=n % row_count
-        )
+        tk.Button(
+            main_frame, image=cover, command=view_book(i["book_id"]), bd=0, highlightthickness=0
+        ).grid(row=int(n / row_count), column=n % row_count)
         if search_results["has_more"]:
             main_canvas.config(scrollregion=(0, 0, 680, int(n / row_count) * 240 + 30))
         else:
@@ -271,9 +284,9 @@ def sload_books(row_count=6):
         image = Image.open(BytesIO(response.content)).resize((100, 150))
         cover = ImageTk.PhotoImage(image)
         book_covers.append(cover)
-        tk.ttk.Button(main_frame, image=cover, command=view_book(i["book_id"])).grid(
-            row=int(n / row_count), column=n % row_count
-        )
+        tk.Button(
+            main_frame, image=cover, command=view_book(i["book_id"]), bd=0, highlightthickness=0
+        ).grid(row=int(n / row_count), column=n % row_count)
         if current_page / 10 < search_results["total_count"]:
             main_canvas.config(scrollregion=(0, 0, 680, int(n / row_count) * 240 + 30))
         else:
@@ -325,6 +338,8 @@ category_ids = dict(
 creation_status = tk.IntVar(value=-1)
 word_count = tk.IntVar(value=-1)
 sort = tk.IntVar(value=0)
+book_id_var = tk.IntVar()
+chapter_id_var = tk.IntVar()
 tk.ttk.Label(filler_frame, text="读者：").grid(row=0, column=0)
 tk.ttk.Radiobutton(filler_frame, variable=gender, text="全部", value=-1).grid(row=0, column=1)
 tk.ttk.Radiobutton(filler_frame, variable=gender, text="男生", value=1).grid(row=0, column=2)
@@ -386,11 +401,9 @@ def sapply():
     pager.select(1)
 
 
-tk.ttk.Button(
-    filler_frame,
-    text="应用",
-    command=apply,
-).grid(row=5, column=2)
+tk.ttk.Button(filler_frame, text="应用", command=apply, bootstyle=ttkbootstrap.OUTLINE).grid(
+    row=5, column=2
+)
 pager.add(filler_frame, text="筛选设置")
 search_frame = tk.ttk.Frame(pager)
 ssort = tk.IntVar(value=0)
@@ -440,12 +453,10 @@ tk.ttk.Radiobutton(search_frame, variable=screation_status, text="连载中", va
 )
 tk.ttk.Label(search_frame, text="关键词：").grid(row=4, column=0)
 tk.ttk.Entry(search_frame, textvariable=query_word, width=30).grid(row=4, column=1, columnspan=3)
-tk.ttk.Button(
-    search_frame,
-    text="应用",
-    command=sapply,
-).grid(row=5, column=2)
-pager.add(search_frame, text="搜索设置")
+tk.ttk.Button(search_frame, text="应用", command=sapply, bootstyle=ttkbootstrap.OUTLINE).grid(
+    row=5, column=2
+)
+pager.add(search_frame, text="搜索设置（无法使用）")
 info_frame = tk.ttk.Frame(pager)
 tk.ttk.Label(
     info_frame, text="你还没有选择书籍o((>ω< ))o", font=("Microsoft YaHei UI", 30, "bold")
@@ -461,6 +472,18 @@ tk.ttk.Label(
     text_frame, text="你还没有选择阅读章节o((>ω< ))o", font=("Microsoft YaHei UI", 30, "bold")
 ).pack(side=tk.TOP)
 pager.add(text_frame, text="阅读书籍")
+jump_frame = tk.ttk.Frame(pager)
+book_id_frame = tk.ttk.Frame(jump_frame)
+tk.ttk.Label(book_id_frame, text="书籍 ID：").pack(side=tk.LEFT)
+tk.ttk.Spinbox(book_id_frame,textvariable=book_id_var).pack(side=tk.LEFT)
+tk.ttk.Button(book_id_frame,text="跳转",command=lambda:view_book(book_id_var.get())()).pack(side=tk.LEFT)
+book_id_frame.pack()
+chapter_id_frame = tk.ttk.Frame(jump_frame)
+tk.ttk.Label(chapter_id_frame, text="章节 ID：").pack(side=tk.LEFT)
+tk.ttk.Spinbox(chapter_id_frame,textvariable=chapter_id_var).pack(side=tk.LEFT)
+tk.ttk.Button(chapter_id_frame,text="跳转",command=lambda:read_chap(chapter_id_var.get())).pack(side=tk.LEFT)
+chapter_id_frame.pack()
+pager.add(jump_frame, text="跳转")
 
 pager.select(1)
 
