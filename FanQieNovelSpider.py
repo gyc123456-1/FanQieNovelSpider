@@ -1,9 +1,11 @@
 import json
+import os
 import re
 import typing
 import typing_extensions
 import requests
 from lxml import etree
+from ebooklib import epub
 
 
 class Paragraphs(list):
@@ -28,7 +30,7 @@ class BookError(Exception): ...
 
 class FanQieChapDecoder:
     """
-    番茄免费小说章节字符解密器
+    章节字符解密器
     """
 
     CODE_ST: int = 0xE3E8
@@ -437,7 +439,7 @@ class FanQieChapDecoder:
 
 class FanQieChapter:
     """
-    番茄免费小说章节相关爬虫
+    章节相关
     """
 
     headers: typing.Dict[str, str] = {
@@ -499,18 +501,46 @@ class FanQieChapter:
         time = json.loads(tree.xpath("//html/head/script[1]/text()")[0])["dateModified"]
         return time.replace("T", " ")
 
-    def get_paras(self: typing_extensions.Self) -> Paragraphs:
+    def get_decoded_html(self: typing_extensions.Self) -> typing.List[dict]:
         """
-        获取段落列表
-        :return: 段落列表
+        获取解密后内容的列表
+        [{"type": "p", "content": "段落内容"},
+        {"type": "i", "src": "图片 URL", "alt": "图片描述", "width": "图片宽度", "height": "图片高度"}, ...]
+        :return: 解密后内容的列表
         """
         json_obj = self.get_api_data()
         content = json_obj["data"]["chapterData"]["content"]
-        tree = etree.HTML(content)
-        content_tags = tree.xpath("//text()")
+
+        parser = etree.HTMLParser()
+        tree = etree.fromstring(f"<root>{content}</root>", parser)
+        result = []
+
+        for element in tree.xpath("//*"):
+            if element.tag == "p" and not element.get("class"):
+                if element.text:
+                    result.append({"type": "p", "content": self.decoder.decode(element.text)})
+            elif element.tag == "img":
+                if element.get("src", "").startswith("http"):
+                    result.append(
+                        {
+                            "type": "i",
+                            "src": element.get("src", ""),
+                            "alt": element.get("alt", ""),
+                            "width": element.get("width", ""),
+                            "height": element.get("height", ""),
+                        }
+                    )
+        return result
+
+    def get_paras(self: typing_extensions.Self) -> Paragraphs:
+        """
+        获取文本段落列表
+        :return: 文本段落列表
+        """
         content = []
-        for content_tag in content_tags:
-            content.append(self.decoder.decode(content_tag))
+        for i in self.get_decoded_html():
+            if i["type"] == "p":
+                content.append(i["content"])
         return Paragraphs(content)
 
     def get_book(self: typing_extensions.Self) -> int:
@@ -532,7 +562,7 @@ class FanQieChapter:
 
 class FanQieBook:
     """
-    番茄免费小说书籍相关爬虫
+    书籍相关
     """
 
     headers: typing.Dict[str, str] = {
@@ -574,7 +604,7 @@ class FanQieBook:
             raise BookError("过段时间后重试")
         return chaps
 
-    def get_infos(self: typing_extensions.Self) -> dict:
+    def get_info(self: typing_extensions.Self) -> dict:
         """
         获取书籍大致信息
         :return: 信息字典
@@ -623,7 +653,7 @@ class FanQieBook:
 
 class FanQieBookSearcher:
     """
-    番茄免费小说搜索书籍相关爬虫
+    搜索书籍相关
     """
 
     headers: typing.Dict[str, str] = {
@@ -690,3 +720,100 @@ class FanQieBookSearcher:
         api_url = f"https://fanqienovel.com/api/author/book/category_list/v0/?gender={gender}"
         response = requests.get(url=api_url, headers=self.headers)
         return response.json()["data"]
+
+
+class FanQieEbook:
+    """
+    下载书籍成电子书格式
+    """
+
+    def __init__(
+        self: typing_extensions.Self,
+        book_id: typing.Union[int, str],
+        cookie: str = "",
+        fallback: typing.Callable = lambda type, content: None,
+    ) -> None:
+        """
+        初始化书籍
+        :param book_id: 书籍 ID
+        :param cookie: 账号 Cookie, 不填则只能爬取完整的前十章和后续章节的开头
+        :param fallback: 回调函数
+        """
+        self.book_object = FanQieBook(book_id)
+        self.cookie = cookie
+        self.fallback = fallback
+
+    def epub(self: typing_extensions.Self, path: str) -> None:
+        """
+        将书籍保存为 EPUB 格式
+        :param path: EPUB 文件输出路径
+        """
+        book = epub.EpubBook()
+
+        self.fallback("epub", ["metadata"])
+        book_info = self.book_object.get_info()
+        book.set_identifier(str(self.book_object.book_id))
+        book.set_title(book_info["title"])
+        book.set_language("zh")
+        book.add_author(book_info["author"])
+        [book.add_metadata("DC", "subject", i) for i in book_info["labels"]]
+        book.add_metadata("DC", "description", book_info["intro"])
+        book.add_metadata("DC", "date", book_info["last_update_time"].replace(" ", "T") + "+08:00")
+        book.set_cover(file_name="cover.jpg", content=requests.get(book_info["cover"]).content)
+
+        html_template = """
+        <!DOCTYPE html>
+        <html xmlns="http://www.w3.org/1999/xhtml">
+          <head>
+            <meta charset="utf-8"/>
+            <title>{title}</title>
+          </head>
+          <body>
+            {content}
+          </body>
+        </html>
+        """
+
+        chapter_item_list = []
+        self.fallback("epub", ["ready"])
+
+        chapter_ids = self.book_object.get_chap_ids()
+        volumes = self.book_object.get_volumes()
+        for n, i in enumerate(chapter_ids, 1):
+            chapter = FanQieChapter(i, cookie=self.cookie)
+            title = chapter.get_title()
+            self.fallback("epub", ["chapter", title, n, len(chapter_ids)])
+            chapter_item = epub.EpubHtml(title=title, file_name=f"chap_{n}.xhtml", lang="zh")
+            html_content = f"<h1>{title}</h1>\n"
+            for j in chapter.get_decoded_html():
+                if j["type"] == "p":
+                    html_content += f"<p>{j['content']}</p>\n"
+                elif j["type"] == "i":
+                    img_content = requests.get(j["src"]).content
+                    md5 = j["src"].split("/")[-1].split("?")[0].split("~")[0]
+                    image_item = epub.EpubItem(
+                        uid=md5,
+                        file_name=f"images/{md5}.jpg",
+                        media_type="image/jpeg",
+                        content=img_content,
+                    )
+                    book.add_item(image_item)
+                    html_content += f"""<img src="images/{md5}.jpg" alt="{j['alt']}" width="{j['width']}" height="{j['height']}">\n"""
+
+            chapter_item.content = html_template.format(title=title, content=html_content)
+            chapter_item_list.append(chapter_item)
+            book.add_item(chapter_item)
+
+        self.fallback("epub", ["volumes"])
+        if not volumes:
+            book.toc = chapter_item_list
+        else:
+            book.toc = tuple(((i[0], chapter_item_list[i[1] - 1 : i[2]]) for i in volumes))
+        book.spine = ["nav"] + chapter_item_list
+
+        book.add_item(epub.EpubNcx())
+        book.add_item(epub.EpubNav())
+
+        self.fallback("epub", ["write"])
+        epub.write_epub(path, book, {})
+        self.fallback("epub", ["done"])
