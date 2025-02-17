@@ -59,7 +59,7 @@ def view_book(book_id):
     def view_book():
         global temp_cover
         book = FanQieNovelSpider.FanQieBook(book_id)
-        book_info = book.get_infos()
+        book_info = book.get_info()
         for widget in info_frame.winfo_children():
             widget.destroy()
         response = requests.get(url=book_info["cover"], headers=headers)
@@ -91,7 +91,7 @@ def download(book):
         progresstext = tk.ttk.Label(info_frame, text=f"0/{item_count}")
         progressbar.grid(row=10, column=0, columnspan=6)
         progresstext.grid(row=10, column=6, columnspan=2)
-        title = book.get_infos()["title"]
+        title = book.get_info()["title"]
         try:
             os.mkdir(title)
         except FileExistsError:
@@ -475,13 +475,17 @@ pager.add(text_frame, text="阅读书籍")
 jump_frame = tk.ttk.Frame(pager)
 book_id_frame = tk.ttk.Frame(jump_frame)
 tk.ttk.Label(book_id_frame, text="书籍 ID：").pack(side=tk.LEFT)
-tk.ttk.Spinbox(book_id_frame,textvariable=book_id_var).pack(side=tk.LEFT)
-tk.ttk.Button(book_id_frame,text="跳转",command=lambda:view_book(book_id_var.get())()).pack(side=tk.LEFT)
+tk.ttk.Spinbox(book_id_frame, textvariable=book_id_var).pack(side=tk.LEFT)
+tk.ttk.Button(book_id_frame, text="跳转", command=lambda: view_book(book_id_var.get())()).pack(
+    side=tk.LEFT
+)
 book_id_frame.pack()
 chapter_id_frame = tk.ttk.Frame(jump_frame)
 tk.ttk.Label(chapter_id_frame, text="章节 ID：").pack(side=tk.LEFT)
-tk.ttk.Spinbox(chapter_id_frame,textvariable=chapter_id_var).pack(side=tk.LEFT)
-tk.ttk.Button(chapter_id_frame,text="跳转",command=lambda:read_chap(chapter_id_var.get())).pack(side=tk.LEFT)
+tk.ttk.Spinbox(chapter_id_frame, textvariable=chapter_id_var).pack(side=tk.LEFT)
+tk.ttk.Button(chapter_id_frame, text="跳转", command=lambda: read_chap(chapter_id_var.get())).pack(
+    side=tk.LEFT
+)
 chapter_id_frame.pack()
 pager.add(jump_frame, text="跳转")
 
